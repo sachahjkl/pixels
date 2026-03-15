@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace pixels_site.Api.Hubs;
 
+
+
 public class CanvasHub : Hub
 {
     public async Task PlacePixel(PixelPlacementRequest request)
