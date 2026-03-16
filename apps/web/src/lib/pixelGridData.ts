@@ -32,6 +32,16 @@ export class PixelGridData {
 		};
 	}
 
+	loadBuffer(buffer: Uint8Array): void {
+		this.data.set(buffer.subarray(0, this.data.length));
+	}
+
+	clone(): PixelGridData {
+		const copy = new PixelGridData(this.width, this.height);
+		copy.data.set(this.data);
+		return copy;
+	}
+
 	fill(r: number, g: number, b: number): void {
 		for (let i = 0; i < this.width * this.height; i++) {
 			const idx = i * 4;

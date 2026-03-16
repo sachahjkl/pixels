@@ -19,9 +19,16 @@
 			ctx.translate(offset.x, offset.y);
 			ctx.scale(scale, scale);
 
+			const x = mouseGridPos.x * pixelSize;
+			const y = mouseGridPos.y * pixelSize;
+
+			ctx.strokeStyle = 'black';
+			ctx.lineWidth = 3 / scale;
+			ctx.strokeRect(x, y, pixelSize, pixelSize);
+
 			ctx.strokeStyle = 'white';
-			ctx.lineWidth = 2 / scale;
-			ctx.strokeRect(mouseGridPos.x * pixelSize, mouseGridPos.y * pixelSize, pixelSize, pixelSize);
+			ctx.lineWidth = 1.5 / scale;
+			ctx.strokeRect(x, y, pixelSize, pixelSize);
 
 			ctx.restore();
 		}}

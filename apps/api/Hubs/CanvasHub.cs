@@ -1,35 +1,28 @@
 using Microsoft.AspNetCore.SignalR;
+using pixels_site.Api.Canvas;
 
 namespace pixels_site.Api.Hubs;
 
-
-
-public class CanvasHub : Hub
+public class CanvasHub(CanvasStateService canvasState, ILogger<CanvasHub> logger) : Hub
 {
     public async Task PlacePixel(PixelPlacementRequest request)
     {
-        if (request.X < 0 || request.X >= 100 || request.Y < 0 || request.Y >= 100)
-        {
+        logger.LogInformation("PlacePixel received: ({X}, {Y}) rgb({R}, {G}, {B})", request.X, request.Y, request.R, request.G, request.B);
+
+        if (request.X < 0 || request.X >= CanvasConfig.Width || request.Y < 0 || request.Y >= CanvasConfig.Height)
             throw new HubException("Invalid pixel coordinates");
-        }
 
-        if (string.IsNullOrWhiteSpace(request.Color) || !IsValidHexColor(request.Color))
-        {
-            throw new HubException("Invalid color");
-        }
+        if (request.R < 0 || request.R > 255 || request.G < 0 || request.G > 255 || request.B < 0 || request.B > 255)
+            throw new HubException("Invalid color values");
 
-        var pixel = new PixelPlacedEvent(request.X, request.Y, request.Color, DateTime.UtcNow);
+        canvasState.SetPixel(request.X, request.Y, request.R, request.G, request.B);
 
-        await Clients.All.SendAsync("PixelPlaced", pixel);
-    }
+        logger.LogInformation("Pixel placed at ({X}, {Y}) with color rgb({R}, {G}, {B}) by {ConnectionId}",
+            request.X, request.Y, request.R, request.G, request.B, Context.ConnectionId);
 
-    private static bool IsValidHexColor(string color)
-    {
-        if (string.IsNullOrWhiteSpace(color)) return false;
-        if (color.Length != 7 || color[0] != '#') return false;
-        return color[1..].All(c => "0123456789abcdefABCDEF".Contains(c));
+        await Clients.All.SendAsync("PixelPlaced", new PixelPlacedEvent(request.X, request.Y, request.R, request.G, request.B));
     }
 }
 
-public record PixelPlacementRequest(int X, int Y, string Color);
-public record PixelPlacedEvent(int X, int Y, string Color, DateTime PlacedAtUtc);
+public record PixelPlacementRequest(int X, int Y, int R, int G, int B);
+public record PixelPlacedEvent(int X, int Y, int R, int G, int B);

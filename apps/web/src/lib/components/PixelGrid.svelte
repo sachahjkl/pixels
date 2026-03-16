@@ -1,24 +1,36 @@
 <script lang="ts">
 	import { Canvas } from 'svelte-canvas';
+	import { onMount } from 'svelte';
 	import { innerWidth, innerHeight } from 'svelte/reactivity/window';
 	import { PixelGridData } from '$lib/pixelGridData';
-	import { DEFAULT_PALETTE } from '$lib/palette';
 	import type { Color } from '$lib/pixel';
 	import CursorLayer from './CursorLayer.svelte';
 	import PixelLayer from './PixelLayer.svelte';
 	import PixelEditMenu from './PixelEditMenu.svelte';
-
-	type PixelGridProps = {
-		width: number;
-		height: number;
-	};
-
-	const { width, height }: PixelGridProps = $props();
+	import * as signalR from '@microsoft/signalr';
 
 	const MAX_ZOOM = 2.5;
 	const MIN_ZOOM = 0.1;
 	const INITIAL_PIXEL_SIZE = 20;
 
+	let connection: signalR.HubConnection | null = $state(null);
+
+	onMount(async () => {
+		const conn = new signalR.HubConnectionBuilder()
+			.withUrl('/hubs/canvas')
+			.withAutomaticReconnect()
+			.build();
+
+		conn.on(
+			'PixelPlaced',
+			({ x, y, r, g, b }: { x: number; y: number; r: number; g: number; b: number }) => {
+				setPixelColor(x, y, r, g, b);
+			}
+		);
+
+		await conn.start();
+		connection = conn;
+	});
 	let scale = $state(1);
 	let offset = $state({ x: 0, y: 0 });
 	let isDragging = $state(false);
@@ -26,6 +38,8 @@
 	let dragStart = $state({ x: 0, y: 0 });
 	let mouseGridPos = $state<{ x: number; y: number } | 'unset'>('unset');
 	let selectedPixel = $state<{ x: number; y: number } | null>(null);
+	let canvasWidth = $state(0);
+	let canvasHeight = $state(0);
 	let pixelRatioValue: number | 'auto' | undefined = $state('auto');
 
 	let pixelSize = $derived(INITIAL_PIXEL_SIZE * scale);
@@ -35,6 +49,7 @@
 	}
 
 	function pixelToColor(x: number, y: number): Color | null {
+		if (gridData === null) return null;
 		const px = gridData.getPixel(x, y);
 		return px ? `#${toHex(px.r)}${toHex(px.g)}${toHex(px.b)}` : null;
 	}
@@ -47,24 +62,40 @@
 		selectedPixel === null ? null : pixelToColor(selectedPixel.x, selectedPixel.y)
 	);
 
-	function createPixelGridData(width: number, height: number): PixelGridData {
-		const grid = new PixelGridData(width, height);
-		const paletteKeys = Object.keys(DEFAULT_PALETTE).map(Number);
-		for (let i = 0; i < width * height; i++) {
-			const colorId = paletteKeys[Math.floor(Math.random() * paletteKeys.length)];
-			const color = DEFAULT_PALETTE[colorId];
-			const x = i % width;
-			const y = Math.floor(i / width);
-			grid.setPixel(x, y, color.r, color.g, color.b);
-		}
-		return grid;
-	}
+	let gridData = $state<PixelGridData | null>(null);
 
-	let gridData = $derived(createPixelGridData(width, height));
+	onMount(async () => {
+		const [configRes, snapshotRes] = await Promise.all([
+			fetch('/api/canvas/config'),
+			fetch('/api/canvas/snapshot')
+		]);
+		const { width, height } = await configRes.json();
+		const buffer = await snapshotRes.arrayBuffer();
+		canvasWidth = width;
+		canvasHeight = height;
+		const grid = new PixelGridData(width, height);
+		grid.loadBuffer(new Uint8Array(buffer));
+		gridData = grid;
+	});
 
 	function setPixelColor(x: number, y: number, r: number, g: number, b: number): void {
-		gridData.setPixel(x, y, r, g, b);
-		gridData = gridData;
+		if (gridData === null) return;
+		const next = gridData.clone();
+		next.setPixel(x, y, r, g, b);
+		gridData = next;
+	}
+
+	function handleColorChange(color: Color): void {
+		if (selectedPixel === null) return;
+		const hex = color.slice(1);
+		const r = parseInt(hex.slice(0, 2), 16);
+		const g = parseInt(hex.slice(2, 4), 16);
+		const b = parseInt(hex.slice(4, 6), 16);
+
+		setPixelColor(selectedPixel.x, selectedPixel.y, r, g, b);
+		connection
+			?.invoke('PlacePixel', { x: selectedPixel.x, y: selectedPixel.y, r, g, b })
+			.catch((err) => console.error('PlacePixel failed:', err));
 	}
 
 	function handleWheel(e: WheelEvent) {
@@ -106,7 +137,7 @@
 		const gridX = Math.floor(canvasX / pixelSize);
 		const gridY = Math.floor(canvasY / pixelSize);
 
-		if (gridX >= 0 && gridX < width && gridY >= 0 && gridY < height) {
+		if (gridX >= 0 && gridX < canvasWidth && gridY >= 0 && gridY < canvasHeight) {
 			mouseGridPos = { x: gridX, y: gridY };
 		} else {
 			mouseGridPos = 'unset';
@@ -143,10 +174,18 @@
 	onmouseup={handleMouseUp}
 	onmouseleave={handleMouseLeave}
 >
-	<PixelLayer {gridData} {offset} {scale} {pixelSize} />
+	{#if gridData !== null}
+		<PixelLayer {gridData} {offset} {scale} {pixelSize} />
+	{/if}
 	<CursorLayer {mouseGridPos} {offset} {scale} {pixelSize} />
 </Canvas>
 
 {#if selectedPixel !== null && selectedColor !== null}
-	<PixelEditMenu x={selectedPixel.x} y={selectedPixel.y} color={selectedColor} />
+	<PixelEditMenu
+		x={selectedPixel.x}
+		y={selectedPixel.y}
+		color={selectedColor}
+		oncolorchange={handleColorChange}
+		onclose={() => (selectedPixel = null)}
+	/>
 {/if}
