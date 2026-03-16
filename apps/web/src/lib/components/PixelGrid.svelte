@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { Canvas } from 'svelte-canvas';
 	import { innerWidth, innerHeight } from 'svelte/reactivity/window';
-	import { randomColor } from '$lib/color';
 	import { PixelGridData } from '$lib/pixelGridData';
 	import { DEFAULT_PALETTE } from '$lib/palette';
+	import type { Color } from '$lib/pixel';
 	import CursorLayer from './CursorLayer.svelte';
 	import PixelLayer from './PixelLayer.svelte';
+	import PixelEditMenu from './PixelEditMenu.svelte';
 
 	type PixelGridProps = {
 		width: number;
@@ -21,11 +22,30 @@
 	let scale = $state(1);
 	let offset = $state({ x: 0, y: 0 });
 	let isDragging = $state(false);
+	let hasDragged = $state(false);
 	let dragStart = $state({ x: 0, y: 0 });
 	let mouseGridPos = $state<{ x: number; y: number } | 'unset'>('unset');
+	let selectedPixel = $state<{ x: number; y: number } | null>(null);
 	let pixelRatioValue: number | 'auto' | undefined = $state('auto');
 
 	let pixelSize = $derived(INITIAL_PIXEL_SIZE * scale);
+
+	function toHex(n: number): string {
+		return n.toString(16).padStart(2, '0').toUpperCase();
+	}
+
+	function pixelToColor(x: number, y: number): Color | null {
+		const px = gridData.getPixel(x, y);
+		return px ? `#${toHex(px.r)}${toHex(px.g)}${toHex(px.b)}` : null;
+	}
+
+	let hoveredColor = $derived(
+		mouseGridPos === 'unset' ? null : pixelToColor(mouseGridPos.x, mouseGridPos.y)
+	);
+
+	let selectedColor = $derived(
+		selectedPixel === null ? null : pixelToColor(selectedPixel.x, selectedPixel.y)
+	);
 
 	function createPixelGridData(width: number, height: number): PixelGridData {
 		const grid = new PixelGridData(width, height);
@@ -40,7 +60,7 @@
 		return grid;
 	}
 
-	let gridData = $state(createPixelGridData(width, height));
+	let gridData = $derived(createPixelGridData(width, height));
 
 	function setPixelColor(x: number, y: number, r: number, g: number, b: number): void {
 		gridData.setPixel(x, y, r, g, b);
@@ -68,6 +88,7 @@
 		const e = event as MouseEvent;
 		if (e.button === 0) {
 			isDragging = true;
+			hasDragged = false;
 			dragStart = { x: e.clientX - offset.x, y: e.clientY - offset.y };
 		}
 	}
@@ -76,6 +97,7 @@
 		const e = event as MouseEvent;
 
 		if (isDragging) {
+			hasDragged = true;
 			offset = { x: e.clientX - dragStart.x, y: e.clientY - dragStart.y };
 		}
 
@@ -92,11 +114,18 @@
 	}
 
 	function handleMouseUp() {
+		if (!hasDragged && mouseGridPos !== 'unset') {
+			selectedPixel = { x: mouseGridPos.x, y: mouseGridPos.y };
+		} else if (hasDragged) {
+			selectedPixel = null;
+		}
 		isDragging = false;
+		hasDragged = false;
 	}
 
 	function handleMouseLeave() {
 		isDragging = false;
+		hasDragged = false;
 		mouseGridPos = 'unset';
 	}
 </script>
@@ -117,3 +146,7 @@
 	<PixelLayer {gridData} {offset} {scale} {pixelSize} />
 	<CursorLayer {mouseGridPos} {offset} {scale} {pixelSize} />
 </Canvas>
+
+{#if selectedPixel !== null && selectedColor !== null}
+	<PixelEditMenu x={selectedPixel.x} y={selectedPixel.y} color={selectedColor} />
+{/if}
