@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Canvas } from 'svelte-canvas';
 	import { onDestroy, onMount } from 'svelte';
+	import { on } from 'svelte/events';
 	import { innerHeight, innerWidth } from 'svelte/reactivity/window';
 	import { apiUrl } from '$lib/api';
 	import type { Color } from '$lib/pixel';
@@ -12,7 +13,7 @@
 	import PixelLayer from './PixelLayer.svelte';
 
 	const MAX_ZOOM = 2.5;
-	const MIN_ZOOM = 0.1;
+	const MIN_ZOOM = 1 / 30;
 	const INITIAL_PIXEL_SIZE = 20;
 	const VIEWPORT_STORAGE_KEY = 'pixel-viewport';
 	const LOCAL_CLIENT_ID =
@@ -59,8 +60,9 @@
 	let pendingSegmentsFrame: number | null = null;
 	let renderVersion = $state(0);
 	let gridData = $state<PixelGridData | null>(null);
+	let removeWheelListener: (() => void) | null = null;
 
-	let pixelSize = $derived(INITIAL_PIXEL_SIZE * scale);
+	let pixelSize = $derived(INITIAL_PIXEL_SIZE);
 
 	function clampZoom(value: number): number {
 		return Math.min(Math.max(value, MIN_ZOOM), MAX_ZOOM);
@@ -408,6 +410,7 @@
 	onMount(async () => {
 		loadViewportState();
 		viewportStateReady = true;
+		removeWheelListener = on(window, 'wheel', handleWheel, { passive: false });
 
 		const conn = new signalR.HubConnectionBuilder()
 			.withUrl(apiUrl('/hubs/canvas'))
@@ -450,14 +453,23 @@
 	});
 
 	function handleWheel(event: WheelEvent) {
+		event.preventDefault();
+
 		const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
 		const newScale = clampZoom(scale * zoomFactor);
+
+		if (newScale === scale) {
+			return;
+		}
+
 		const mouseX = event.clientX;
 		const mouseY = event.clientY;
+		const worldX = (mouseX - offset.x) / scale;
+		const worldY = (mouseY - offset.y) / scale;
 
 		offset = {
-			x: mouseX - (mouseX - offset.x) * (newScale / scale),
-			y: mouseY - (mouseY - offset.y) * (newScale / scale)
+			x: mouseX - worldX * newScale,
+			y: mouseY - worldY * newScale
 		};
 
 		scale = newScale;
@@ -549,11 +561,10 @@
 			flushPendingSegments();
 		}
 
+		removeWheelListener?.();
 		connection?.stop();
 	});
 </script>
-
-<svelte:window onwheel={handleWheel} />
 
 <Canvas
 	width={innerWidth.current}
