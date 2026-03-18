@@ -93,7 +93,6 @@
 	}
 
 	function handleWheel(e: WheelEvent) {
-		e.preventDefault();
 		const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
 
 		const newScale = Math.min(Math.max(scale * zoomFactor, MIN_ZOOM), MAX_ZOOM);

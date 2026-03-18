@@ -17,7 +17,7 @@
 
 	const paletteEntries = Object.values(DEFAULT_PALETTE).map(rgbToColor);
 	const favorites = new FavoriteColors();
-	
+
 	let customColorInput: HTMLInputElement;
 
 	function handleCustomColorClick() {
@@ -89,7 +89,7 @@
 			</button>
 			<button
 				type="button"
-				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-yellow-600 text-white transition-all hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-yellow-600 text-white transition-all hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-50"
 				onclick={handleAddToFavorites}
 				disabled={favorites.has(selectedColor)}
 				title={favorites.has(selectedColor) ? 'Already in favorites' : 'Add to favorites'}
@@ -137,8 +137,9 @@
 						title={favoriteColor}
 						aria-pressed={favoriteColor === selectedColor}
 					>
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<span
-							class="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-red-600 text-xs text-white group-hover:flex"
+							class="absolute -top-1 -right-1 hidden h-4 w-4 items-center justify-center rounded-full bg-red-600 text-xs text-white group-hover:flex"
 							onclick={(e) => handleRemoveFromFavorites(favoriteColor, e)}
 							role="button"
 							tabindex="-1"
